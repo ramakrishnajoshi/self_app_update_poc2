@@ -1,88 +1,99 @@
 package com.example.self_app_update_poc2
 
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import androidx.annotation.NonNull
-import androidx.core.content.FileProvider
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.os.Bundle
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 
-class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.self_app_update_poc2/app_update"
+class MainActivity : FlutterActivity() {
+    private var mDevicePolicyManager: DevicePolicyManager? = null
+    private var mAdminComponentName: ComponentName? = null
 
-    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "installApk") {
-                val filePath = call.argument<String>("filePath")
-                if (filePath != null) {
-                    installApk(filePath, result)
-                } else {
-                    result.error("INVALID_ARGUMENT", "File path is required", null)
+
+        // Initialize device policy manager
+        mDevicePolicyManager =
+            getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager?
+        mAdminComponentName = ComponentName(this, AppDeviceAdminReceiver::class.java)
+
+        // Set up kiosk method channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, KIOSK_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isDeviceOwner" -> {
+                        val isDeviceOwner: Boolean = mDevicePolicyManager?.isDeviceOwnerApp(packageName) ?: false
+                        Log.i(TAG, "isDeviceOwner: $isDeviceOwner")
+                        result.success(isDeviceOwner)
+                    }
+
+                    "startLockTask" -> {
+                        if (mDevicePolicyManager?.isLockTaskPermitted(packageName) == true) {
+                            Log.i(TAG, "Starting lock task mode")
+                            startLockTask()
+                            result.success(true)
+                        } else {
+                            Log.w(TAG, "Lock task not permitted for this app")
+                            result.success(false)
+                        }
+                    }
+
+                    "stopLockTask" -> {
+                        try {
+                            Log.i(TAG, "Stopping lock task mode")
+                            stopLockTask()
+                            result.success(true)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error stopping lock task: ${e.message}")
+                            result.success(false)
+                        }
+                    }
+
+                    else -> result.notImplemented()
                 }
-            } else {
+            }
+
+        // Setup app update channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_UPDATE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                // For now, this is empty
+                // Implement app install functionality here if needed
                 result.notImplemented()
             }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Check if we're in device owner mode and start lock task automatically
+        if (mDevicePolicyManager != null &&
+            mDevicePolicyManager?.isDeviceOwnerApp(packageName) == true &&
+            mDevicePolicyManager?.isLockTaskPermitted(packageName) == true
+        ) {
+            Log.i(TAG, "Device owner detected, starting lock task mode")
+            startLockTask()
         }
     }
-    
-    private fun installApk(filePath: String, result: MethodChannel.Result) {
-        try {
-            val file = File(filePath)
-            if (!file.exists()) {
-                result.error("FILE_NOT_FOUND", "The APK file was not found", null)
-                return
-            }
-            
-            // For Android 8+ (API 26+), we need to request the permission to install unknown apps
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                    // Open settings to enable "Install Unknown Apps" permission
-                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                    intent.data = Uri.parse("package:${context.packageName}")
-                    startActivity(intent)
-                    result.error("PERMISSION_REQUIRED", "Permission to install apps is required", null)
-                    return
-                }
-            }
-            
-            val intent = Intent(Intent.ACTION_VIEW)
-            val uri: Uri
-            
-            // For Android 7+ (API 24+), we need to use FileProvider
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } else {
-                uri = Uri.fromFile(file)
-            }
-            
-            intent.setDataAndType(uri, "application/vnd.android.package-archive")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            
-            // For Android 9+ (API 28+), we need to use the package installer
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                if (intent.resolveActivity(packageManager) != null) {
-                    context.startActivity(intent)
-                    result.success(true)
-                } else {
-                    result.error("NO_ACTIVITY", "No activity found to handle the intent", null)
-                }
-            } else {
-                context.startActivity(intent)
-                result.success(true)
-            }
-        } catch (e: Exception) {
-            result.error("INSTALL_FAILED", e.message, null)
+
+    override fun onResume() {
+        super.onResume()
+
+        // Re-enter lock task mode if needed
+        if (mDevicePolicyManager != null &&
+            mDevicePolicyManager?.isDeviceOwnerApp(packageName) == true &&
+            mDevicePolicyManager?.isLockTaskPermitted(packageName) == true
+        ) {
+            startLockTask()
         }
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val KIOSK_CHANNEL = "com.example.self_app_update_poc2/kiosk"
+        private const val APP_UPDATE_CHANNEL = "com.example.self_app_update_poc2/app_update"
     }
 }
