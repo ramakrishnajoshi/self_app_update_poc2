@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Self App Update POC2</string>
+    <string name="device_admin_label">App Device Admin</string>
+    <string name="device_admin_description">Enable device administration features for kiosk mode</string>
+</resources>
