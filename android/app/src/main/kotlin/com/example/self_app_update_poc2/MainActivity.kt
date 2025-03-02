@@ -10,13 +10,23 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.app.ActivityManager
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.self_app_update_poc2/app_update"
+    private val KIOSK_CHANNEL = "com.example.self_app_update_poc2/kiosk"
+    private lateinit var devicePolicyManager: DevicePolicyManager
+    private lateinit var componentName: ComponentName
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
+        devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        componentName = ComponentName(this, DeviceAdminReceiver::class.java)
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "installApk") {
                 val filePath = call.argument<String>("filePath")
@@ -27,6 +37,23 @@ class MainActivity: FlutterActivity() {
                 }
             } else {
                 result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, KIOSK_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startKioskMode" -> {
+                    startKioskMode(result)
+                }
+                "stopKioskMode" -> {
+                    stopKioskMode(result)
+                }
+                "isInKioskMode" -> {
+                    result.success(isInKioskMode())
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
     }
@@ -84,5 +111,39 @@ class MainActivity: FlutterActivity() {
         } catch (e: Exception) {
             result.error("INSTALL_FAILED", e.message, null)
         }
+    }
+
+    private fun startKioskMode(result: MethodChannel.Result) {
+        try {
+            if (!devicePolicyManager.isAdminActive(componentName)) {
+                // Request device admin privileges
+                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
+                startActivity(intent)
+                result.error("ADMIN_REQUIRED", "Device admin privileges required", null)
+                return
+            }
+
+            startService(Intent(this, KioskService::class.java))
+            startLockTask()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("KIOSK_ERROR", e.message, null)
+        }
+    }
+
+    private fun stopKioskMode(result: MethodChannel.Result) {
+        try {
+            stopLockTask()
+            stopService(Intent(this, KioskService::class.java))
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("KIOSK_ERROR", e.message, null)
+        }
+    }
+
+    private fun isInKioskMode(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
     }
 }

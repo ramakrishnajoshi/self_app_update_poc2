@@ -5,6 +5,7 @@ import 'package:self_app_update_poc2/services/update_service.dart';
 import 'package:self_app_update_poc2/widgets/update_dialog.dart';
 import 'package:self_app_update_poc2/widgets/download_progress_widget.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:self_app_update_poc2/services/kiosk_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -187,6 +188,37 @@ class _MyHomePageState extends State<MyHomePage> {
               child: _isCheckingForUpdates
                   ? const CircularProgressIndicator()
                   : const Text('Check for Updates'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final result = await KioskService.startKioskMode();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(result
+                          ? 'Kiosk mode enabled'
+                          : 'Failed to enable kiosk mode'),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Start Kiosk Mode'),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () async {
+                final result = await KioskService.stopKioskMode();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(result
+                          ? 'Kiosk mode disabled'
+                          : 'Failed to disable kiosk mode'),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Stop Kiosk Mode'),
             ),
           ],
         ),
