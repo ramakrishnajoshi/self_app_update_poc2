@@ -13,7 +13,7 @@ import 'package:self_app_update_poc2/services/platform_service.dart';
 class UpdateService {
   // Mock API URL - replace with your actual API endpoint
   final String apiUrl =
-      'https://run.mocky.io/v3/85211d95-72bc-43b8-ac4f-f9e00971d311';
+      'https://run.mocky.io/v3/c8f17e85-35f4-4298-b834-f999f049fd18';
 
   // Singleton pattern
   static final UpdateService _instance = UpdateService._internal();
