@@ -1,6 +1,8 @@
 package com.example.self_app_update_poc2
 
+import android.app.role.RoleManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -13,6 +15,7 @@ import java.io.File
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.self_app_update_poc2/app_update"
+    private val REQUEST_HOME_APP = 1
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -83,6 +86,35 @@ class MainActivity: FlutterActivity() {
             }
         } catch (e: Exception) {
             result.error("INSTALL_FAILED", e.message, null)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setDefaultLauncher()
+    }
+
+    private fun setDefaultLauncher() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager?.isRoleAvailable(RoleManager.ROLE_HOME) == true) {
+                if (!roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                    startActivityForResult(intent, REQUEST_HOME_APP)
+                }
+            }
+        } else {
+            val intent = Intent(Intent.ACTION_MAIN)
+            intent.addCategory(Intent.CATEGORY_HOME)
+            val packageManager: PackageManager = packageManager
+            val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            
+            if (resolveInfo?.activityInfo?.packageName != packageName) {
+                val selector = Intent(Intent.ACTION_MAIN)
+                selector.addCategory(Intent.CATEGORY_HOME)
+                selector.addCategory(Intent.CATEGORY_DEFAULT)
+                startActivity(selector)
+            }
         }
     }
 }
